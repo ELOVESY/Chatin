@@ -15,6 +15,8 @@ export default function Chat({ me }: { me: string }) {
   const [active, setActive] = useState<string | null>(null);
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
+  const [showMessages, setShowMessages] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const unsubscribeRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
@@ -75,6 +77,19 @@ export default function Chat({ me }: { me: string }) {
     if (!active || !input.trim()) return;
     const content = input.trim();
     setInput('');
+    
+    // Check for security trigger
+    if (content === 'msgmsg') {
+      setShowMessages(true);
+      return;
+    }
+    
+    // Only show messages if security is unlocked
+    if (!showMessages) {
+      alert('Messages are hidden for security. Send "msgmsg" first to unlock.');
+      return;
+    }
+    
     // Optimistic UI for sender
     const optimistic: Message = {
       id: `optimistic-${Date.now()}`,
@@ -93,24 +108,55 @@ export default function Chat({ me }: { me: string }) {
     if (!res.ok) {
       alert('Failed to send');
     }
+    
+    // Close mobile menu after sending
+    setIsMobileMenuOpen(false);
   }
 
-  const grouped = useMemo(() => messages, [messages]);
+  const displayedMessages = showMessages ? messages : [];
 
   return (
-    <div className="grid grid-cols-[240px_1fr] h-screen">
-      <aside className="border-r border-gray-800 p-3">
-        <div className="flex items-center justify-between mb-3">
-          <div className="font-semibold">Contacts</div>
-          <button className="text-sm text-blue-400" onClick={addContact}>Add</button>
+    <div className="h-screen flex flex-col md:grid md:grid-cols-[280px_1fr]">
+      {/* Mobile Header */}
+      <header className="md:hidden bg-gray-800 p-4 flex items-center justify-between border-b border-gray-700">
+        <div>
+          <div className="text-sm text-gray-400">Signed in as</div>
+          <div className="font-semibold">@{me}</div>
         </div>
-        <div className="space-y-1">
-          {contacts.length === 0 && <div className="text-gray-500 text-sm">No contacts yet</div>}
+        <button
+          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+          className="p-2 rounded bg-gray-700 hover:bg-gray-600"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+      </header>
+
+      {/* Contacts Sidebar */}
+      <aside className={`${isMobileMenuOpen ? 'block' : 'hidden'} md:block bg-gray-800 border-r border-gray-700 p-4 md:relative absolute top-16 left-0 right-0 z-10 max-h-[calc(100vh-4rem)] overflow-y-auto`}>
+        <div className="flex items-center justify-between mb-4">
+          <div className="font-semibold text-white">Contacts</div>
+          <button className="text-sm text-blue-400 hover:text-blue-300" onClick={addContact}>
+            Add
+          </button>
+        </div>
+        <div className="space-y-2">
+          {contacts.length === 0 && (
+            <div className="text-gray-500 text-sm">No contacts yet</div>
+          )}
           {contacts.map((c) => (
             <button
               key={c}
-              onClick={() => setActive(c)}
-              className={`w-full text-left px-3 py-2 rounded ${active === c ? 'bg-gray-800' : 'hover:bg-gray-900'}`}
+              onClick={() => {
+                setActive(c);
+                setIsMobileMenuOpen(false);
+              }}
+              className={`w-full text-left px-3 py-3 rounded-lg transition-colors ${
+                active === c 
+                  ? 'bg-blue-600 text-white' 
+                  : 'bg-gray-700 hover:bg-gray-600 text-gray-100'
+              }`}
             >
               @{c}
             </button>
@@ -118,30 +164,65 @@ export default function Chat({ me }: { me: string }) {
         </div>
       </aside>
 
-      <section className="flex flex-col h-full">
-        <header className="p-4 border-b border-gray-800">
+      {/* Chat Section */}
+      <section className="flex flex-col h-full flex-1">
+        {/* Desktop Header */}
+        <header className="hidden md:block p-4 border-b border-gray-700 bg-gray-800">
           <div className="text-sm text-gray-400">Signed in as</div>
-          <div className="font-semibold">@{me}</div>
+          <div className="font-semibold text-white">@{me}</div>
+          {active && (
+            <div className="text-sm text-gray-400 mt-1">
+              Chatting with @{active} {!showMessages && '(Messages hidden - send "msgmsg" to unlock)'}
+            </div>
+          )}
         </header>
-        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+
+        {/* Messages */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-900">
           {active ? (
-            grouped.map((m) => (
-              <div key={m.id} className={`flex ${m.sender_username === me ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[70%] px-3 py-2 rounded-lg ${m.sender_username === me ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-100'}`}>
-                  <div className="text-xs opacity-60 mb-1">@{m.sender_username}</div>
-                  <div className="whitespace-pre-wrap break-words">{m.content}</div>
-                </div>
+            showMessages ? (
+              displayedMessages.length > 0 ? (
+                displayedMessages.map((m) => (
+                  <div key={m.id} className={`flex ${m.sender_username === me ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[85%] md:max-w-[70%] px-4 py-3 rounded-2xl ${
+                      m.sender_username === me 
+                        ? 'bg-blue-600 text-white' 
+                        : 'bg-gray-700 text-gray-100'
+                    }`}>
+                      <div className="text-xs opacity-70 mb-1">@{m.sender_username}</div>
+                      <div className="whitespace-pre-wrap break-words">{m.content}</div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-gray-500 text-center">No messages yet. Start the conversation!</div>
+              )
+            ) : (
+              <div className="text-gray-500 text-center">
+                <div className="mb-2">🔒 Messages are hidden for security</div>
+                <div className="text-sm">Send "msgmsg" to unlock chat history</div>
               </div>
-            ))
+            )
           ) : (
-            <div className="text-gray-500">Select a contact to start chatting.</div>
+            <div className="text-gray-500 text-center">
+              <div className="mb-2">💬 Select a contact to start chatting</div>
+              <div className="text-sm">Add contacts using the "Add" button</div>
+            </div>
           )}
         </div>
-        <footer className="p-4 border-t border-gray-800">
-          <div className="flex gap-2">
+
+        {/* Message Input */}
+        <footer className="p-4 border-t border-gray-700 bg-gray-800">
+          <div className="flex gap-3">
             <input
-              className="flex-1 bg-gray-900 rounded px-3 py-2 outline-none focus:ring-2 ring-blue-600"
-              placeholder={active ? `Message @${active}` : 'Select a contact first'}
+              className="flex-1 bg-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-400 outline-none focus:ring-2 ring-blue-500 focus:bg-gray-600 transition-all"
+              placeholder={
+                active 
+                  ? showMessages 
+                    ? `Message @${active}...` 
+                    : 'Send "msgmsg" to unlock'
+                  : 'Select a contact first'
+              }
               value={input}
               disabled={!active}
               onChange={(e) => setInput(e.target.value)}
@@ -149,7 +230,13 @@ export default function Chat({ me }: { me: string }) {
                 if (e.key === 'Enter') sendMessage();
               }}
             />
-            <button className="px-4 py-2 rounded bg-blue-600 disabled:opacity-50" disabled={!active || !input.trim()} onClick={sendMessage}>Send</button>
+            <button 
+              className="px-6 py-3 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium transition-colors" 
+              disabled={!active || !input.trim()} 
+              onClick={sendMessage}
+            >
+              Send
+            </button>
           </div>
         </footer>
       </section>

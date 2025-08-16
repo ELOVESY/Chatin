@@ -27,14 +27,14 @@ export default function HomePage() {
 
   if (!unlocked) {
     return (
-      <main className="min-h-screen flex items-center justify-center p-6">
+      <main className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-gray-900 via-gray-800 to-black">
         <Calculator onUnlock={handleUnlock} />
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen">
+    <main className="min-h-screen bg-gray-900">
       <Chat me={username ?? getUsername() ?? ''} />
     </main>
   );
