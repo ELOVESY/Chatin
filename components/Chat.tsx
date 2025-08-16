@@ -15,6 +15,7 @@ export default function Chat({ me }: { me: string }) {
   const [active, setActive] = useState<string | null>(null);
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
+  const unsubscribeRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     const supabase = getSupabaseClient();
@@ -33,22 +34,29 @@ export default function Chat({ me }: { me: string }) {
     const supabase = getSupabaseClient();
     
     // Load existing messages for thread
-    const loadMessages = async () => {
-      const { data } = await supabase
-        .from('messages')
-        .select('*')
-        .or(`and(sender_username.eq.${me},receiver_username.eq.${active}),and(sender_username.eq.${active},receiver_username.eq.${me})`)
-        .order('created_at', { ascending: true });
-      setMessages((data as Message[]) ?? []);
-    };
+    supabase
+      .from('messages')
+      .select('*')
+      .or(`and(sender_username.eq.${me},receiver_username.eq.${active}),and(sender_username.eq.${active},receiver_username.eq.${me})`)
+      .order('created_at', { ascending: true })
+      .then(({ data }) => {
+        setMessages((data as Message[]) ?? []);
+      });
 
-    loadMessages();
+    // Subscribe realtime for incoming from active (now that Realtime is enabled)
+    const channel = supabase
+      .channel(`messages:${me}:${active}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `receiver_username=eq.${me}` }, (payload) => {
+        const row = payload.new as Message;
+        if (row.sender_username === active) {
+          setMessages((prev) => [...prev, row]);
+        }
+      })
+      .subscribe();
 
-    // Poll for new messages every 2 seconds (since Realtime isn't available)
-    const pollInterval = setInterval(loadMessages, 2000);
-
+    unsubscribeRef.current = () => supabase.removeChannel(channel);
     return () => {
-      clearInterval(pollInterval);
+      if (unsubscribeRef.current) unsubscribeRef.current();
     };
   }, [me, active]);
 
