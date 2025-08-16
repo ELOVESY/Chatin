@@ -22,6 +22,7 @@ export default function Chat({ me }: { me: string }) {
   const [selfDestructTimer, setSelfDestructTimer] = useState<number>(0); // 0 = never, value in minutes
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [scheduledDateTime, setScheduledDateTime] = useState('');
+  const [sessionStartTime] = useState(Date.now()); // Track when this session started
   const unsubscribeRef = useRef<(() => void) | null>(null);
 
   // Auto-cleanup expired messages and refresh timers
@@ -107,7 +108,20 @@ export default function Chat({ me }: { me: string }) {
         .select('*')
         .or(`and(sender_username.eq.${me},receiver_username.eq.${active}),and(sender_username.eq.${active},receiver_username.eq.${me})`)
         .order('created_at', { ascending: true });
-      setMessages((data as Message[]) ?? []);
+      
+      // Merge previous messages with current messages, removing duplicates
+      if (data) {
+        setMessages(prev => {
+          const allMessages = [...(data as Message[])];
+          // Add any optimistic messages that aren't in the database yet
+          prev.forEach(msg => {
+            if (msg.id.startsWith('optimistic-') && !allMessages.find(m => m.content === msg.content && m.created_at === msg.created_at)) {
+              allMessages.push(msg);
+            }
+          });
+          return allMessages.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+        });
+      }
       // Don't return here - let the message be sent normally
     }
     
@@ -229,11 +243,14 @@ export default function Chat({ me }: { me: string }) {
   const displayedMessages = useMemo(() => {
     if (!showPreviousMessages) {
       // Only show messages from current session (after component mounted)
-      const sessionStart = new Date().getTime() - 5 * 60 * 1000; // Last 5 minutes as session start
-      return messages.filter(m => new Date(m.created_at).getTime() > sessionStart);
+      // Show optimistic messages (sent in this session) + very recent messages
+      return messages.filter(m => 
+        m.id.startsWith('optimistic-') || 
+        new Date(m.created_at).getTime() >= sessionStartTime
+      );
     }
     return messages;
-  }, [messages, showPreviousMessages]);
+  }, [messages, showPreviousMessages, sessionStartTime]);
 
   return (
     <div className="h-screen max-h-screen flex flex-col md:grid md:grid-cols-[280px_1fr] overflow-hidden">
