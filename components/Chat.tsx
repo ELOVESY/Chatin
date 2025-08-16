@@ -15,7 +15,7 @@ export default function Chat({ me }: { me: string }) {
   const [active, setActive] = useState<string | null>(null);
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
-  const [showMessages, setShowMessages] = useState(false);
+  const [showPreviousMessages, setShowPreviousMessages] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const unsubscribeRef = useRef<(() => void) | null>(null);
 
@@ -35,15 +35,20 @@ export default function Chat({ me }: { me: string }) {
     if (!active) return;
     const supabase = getSupabaseClient();
     
-    // Load existing messages for thread
-    supabase
-      .from('messages')
-      .select('*')
-      .or(`and(sender_username.eq.${me},receiver_username.eq.${active}),and(sender_username.eq.${active},receiver_username.eq.${me})`)
-      .order('created_at', { ascending: true })
-      .then(({ data }) => {
-        setMessages((data as Message[]) ?? []);
-      });
+    // Load existing messages for thread (only if previous messages are unlocked)
+    if (showPreviousMessages) {
+      supabase
+        .from('messages')
+        .select('*')
+        .or(`and(sender_username.eq.${me},receiver_username.eq.${active}),and(sender_username.eq.${active},receiver_username.eq.${me})`)
+        .order('created_at', { ascending: true })
+        .then(({ data }) => {
+          setMessages((data as Message[]) ?? []);
+        });
+    } else {
+      // Only show messages from this session (new messages)
+      setMessages([]);
+    }
 
     // Subscribe realtime for incoming from active (now that Realtime is enabled)
     const channel = supabase
@@ -60,7 +65,7 @@ export default function Chat({ me }: { me: string }) {
     return () => {
       if (unsubscribeRef.current) unsubscribeRef.current();
     };
-  }, [me, active]);
+  }, [me, active, showPreviousMessages]);
 
   function addContact() {
     const u = window.prompt('Add contact by username:');
@@ -78,19 +83,21 @@ export default function Chat({ me }: { me: string }) {
     const content = input.trim();
     setInput('');
     
-    // Check for security trigger
+    // Check for security trigger (optional - unlocks previous messages)
     if (content === 'msgmsg') {
-      setShowMessages(true);
+      setShowPreviousMessages(true);
+      // Load previous messages after unlocking
+      const supabase = getSupabaseClient();
+      const { data } = await supabase
+        .from('messages')
+        .select('*')
+        .or(`and(sender_username.eq.${me},receiver_username.eq.${active}),and(sender_username.eq.${active},receiver_username.eq.${me})`)
+        .order('created_at', { ascending: true });
+      setMessages((data as Message[]) ?? []);
       return;
     }
     
-    // Only show messages if security is unlocked
-    if (!showMessages) {
-      alert('Messages are hidden for security. Send "msgmsg" first to unlock.');
-      return;
-    }
-    
-    // Optimistic UI for sender
+    // Send normal message (always allowed)
     const optimistic: Message = {
       id: `optimistic-${Date.now()}`,
       sender_username: me,
@@ -113,7 +120,7 @@ export default function Chat({ me }: { me: string }) {
     setIsMobileMenuOpen(false);
   }
 
-  const displayedMessages = showMessages ? messages : [];
+  const displayedMessages = messages;
 
   return (
     <div className="h-screen flex flex-col md:grid md:grid-cols-[280px_1fr]">
@@ -172,7 +179,7 @@ export default function Chat({ me }: { me: string }) {
           <div className="font-semibold text-white">@{me}</div>
           {active && (
             <div className="text-sm text-gray-400 mt-1">
-              Chatting with @{active} {!showMessages && '(Messages hidden - send "msgmsg" to unlock)'}
+              Chatting with @{active} {!showPreviousMessages && '(Previous messages hidden for privacy)'}
             </div>
           )}
         </header>
@@ -180,9 +187,14 @@ export default function Chat({ me }: { me: string }) {
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-900">
           {active ? (
-            showMessages ? (
-              displayedMessages.length > 0 ? (
-                displayedMessages.map((m) => (
+            displayedMessages.length > 0 ? (
+              <>
+                {!showPreviousMessages && (
+                  <div className="text-center text-gray-500 text-sm mb-4 p-3 bg-gray-800 rounded-lg">
+                    💡 Previous messages hidden for privacy. Send "msgmsg" to view chat history.
+                  </div>
+                )}
+                {displayedMessages.map((m) => (
                   <div key={m.id} className={`flex ${m.sender_username === me ? 'justify-end' : 'justify-start'}`}>
                     <div className={`max-w-[85%] md:max-w-[70%] px-4 py-3 rounded-2xl ${
                       m.sender_username === me 
@@ -193,19 +205,20 @@ export default function Chat({ me }: { me: string }) {
                       <div className="whitespace-pre-wrap break-words">{m.content}</div>
                     </div>
                   </div>
-                ))
-              ) : (
-                <div className="text-gray-500 text-center">No messages yet. Start the conversation!</div>
-              )
+                ))}
+              </>
             ) : (
               <div className="text-gray-500 text-center">
-                <div className="mb-2">🔒 Messages are hidden for security</div>
-                <div className="text-sm">Send "msgmsg" to unlock chat history</div>
+                <div className="mb-2">💬 Start the conversation!</div>
+                <div className="text-sm">Type a message below to begin chatting</div>
+                {!showPreviousMessages && (
+                  <div className="text-xs mt-2 opacity-70">Send "msgmsg" to view previous messages</div>
+                )}
               </div>
             )
           ) : (
             <div className="text-gray-500 text-center">
-              <div className="mb-2">💬 Select a contact to start chatting</div>
+              <div className="mb-2">📱 Select a contact to start chatting</div>
               <div className="text-sm">Add contacts using the "Add" button</div>
             </div>
           )}
@@ -218,9 +231,7 @@ export default function Chat({ me }: { me: string }) {
               className="flex-1 bg-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-400 outline-none focus:ring-2 ring-blue-500 focus:bg-gray-600 transition-all"
               placeholder={
                 active 
-                  ? showMessages 
-                    ? `Message @${active}...` 
-                    : 'Send "msgmsg" to unlock'
+                  ? `Message @${active}...`
                   : 'Select a contact first'
               }
               value={input}
