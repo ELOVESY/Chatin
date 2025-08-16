@@ -17,6 +17,7 @@ export default function Chat({ me }: { me: string }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [showPreviousMessages, setShowPreviousMessages] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const unsubscribeRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
@@ -120,6 +121,61 @@ export default function Chat({ me }: { me: string }) {
     setIsMobileMenuOpen(false);
   }
 
+  async function clearAllMessages() {
+    if (!confirm('Delete ALL messages for this conversation? This cannot be undone!')) return;
+    
+    const supabase = getSupabaseClient();
+    await supabase
+      .from('messages')
+      .delete()
+      .or(`and(sender_username.eq.${me},receiver_username.eq.${active}),and(sender_username.eq.${active},receiver_username.eq.${me})`);
+    
+    setMessages([]);
+    setShowPreviousMessages(false);
+    alert('Messages deleted successfully!');
+  }
+
+  async function clearAllContacts() {
+    if (!confirm('Delete ALL contacts? This will clear your contact list!')) return;
+    
+    setContacts([]);
+    setActive(null);
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('chat.contacts');
+    }
+    alert('Contacts cleared successfully!');
+  }
+
+  async function resetUsername() {
+    if (!confirm('Reset username? You will need to set a new one!')) return;
+    
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('chat.username');
+    }
+    window.location.reload(); // Reload to force new username setup
+  }
+
+  async function clearEverything() {
+    if (!confirm('⚠️ DELETE EVERYTHING? This will:\n- Delete ALL messages\n- Clear ALL contacts\n- Reset your username\n\nThis CANNOT be undone!')) return;
+    
+    const supabase = getSupabaseClient();
+    
+    // Delete all messages where user is sender or receiver
+    await supabase
+      .from('messages')
+      .delete()
+      .or(`sender_username.eq.${me},receiver_username.eq.${me}`);
+    
+    // Clear local data
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('chat.contacts');
+      localStorage.removeItem('chat.username');
+    }
+    
+    alert('All data deleted! Redirecting to calculator...');
+    window.location.reload();
+  }
+
   const displayedMessages = messages;
 
   return (
@@ -144,10 +200,55 @@ export default function Chat({ me }: { me: string }) {
       <aside className={`${isMobileMenuOpen ? 'block' : 'hidden'} md:block bg-gray-800 border-r border-gray-700 p-4 md:relative absolute top-16 left-0 right-0 z-10 max-h-[calc(100vh-4rem)] overflow-y-auto`}>
         <div className="flex items-center justify-between mb-4">
           <div className="font-semibold text-white">Contacts</div>
-          <button className="text-sm text-blue-400 hover:text-blue-300" onClick={addContact}>
-            Add
-          </button>
+          <div className="flex gap-2">
+            <button className="text-sm text-blue-400 hover:text-blue-300" onClick={addContact}>
+              Add
+            </button>
+            <button 
+              className="text-sm text-gray-400 hover:text-white" 
+              onClick={() => setShowSettings(!showSettings)}
+              title="Settings"
+            >
+              ⚙️
+            </button>
+          </div>
         </div>
+
+        {/* Settings Menu */}
+        {showSettings && (
+          <div className="mb-4 p-3 bg-gray-700 rounded-lg border border-gray-600">
+            <div className="text-sm font-semibold text-white mb-3">⚙️ Settings</div>
+            <div className="space-y-2">
+              <button
+                onClick={clearAllMessages}
+                disabled={!active}
+                className="w-full text-left text-sm text-red-400 hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed p-2 hover:bg-gray-600 rounded"
+              >
+                🗑️ Clear This Conversation
+              </button>
+              <button
+                onClick={clearAllContacts}
+                className="w-full text-left text-sm text-orange-400 hover:text-orange-300 p-2 hover:bg-gray-600 rounded"
+              >
+                📱 Clear All Contacts
+              </button>
+              <button
+                onClick={resetUsername}
+                className="w-full text-left text-sm text-yellow-400 hover:text-yellow-300 p-2 hover:bg-gray-600 rounded"
+              >
+                👤 Change Username
+              </button>
+              <hr className="border-gray-600 my-2" />
+              <button
+                onClick={clearEverything}
+                className="w-full text-left text-sm text-red-500 hover:text-red-400 p-2 hover:bg-gray-600 rounded font-medium"
+              >
+                ⚠️ Delete Everything
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="space-y-2">
           {contacts.length === 0 && (
             <div className="text-gray-500 text-sm">No contacts yet</div>
