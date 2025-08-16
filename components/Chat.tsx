@@ -28,8 +28,18 @@ export default function Chat({ me }: { me: string }) {
   // Auto-cleanup expired messages and refresh timers
   useEffect(() => {
     const interval = setInterval(() => {
-      setMessages(prev => prev.filter(m => !m.expires_at || new Date(m.expires_at) > new Date()));
-    }, 10000); // Check every 10 seconds
+      setMessages(prev => {
+        const now = new Date();
+        const filtered = prev.filter(m => !m.expires_at || new Date(m.expires_at) > now);
+        
+        // Debug: Log if messages are being filtered
+        if (filtered.length !== prev.length) {
+          console.log(`Filtered out ${prev.length - filtered.length} expired messages`);
+        }
+        
+        return filtered;
+      });
+    }, 5000); // Check every 5 seconds for more responsive cleanup
 
     return () => clearInterval(interval);
   }, []);
@@ -134,6 +144,12 @@ export default function Chat({ me }: { me: string }) {
       created_at: new Date().toISOString(),
       expires_at: selfDestructTimer > 0 ? new Date(Date.now() + selfDestructTimer * 60 * 1000).toISOString() : undefined
     };
+    
+    // Debug: Log timer values
+    console.log(`Self-destruct timer: ${selfDestructTimer} minutes`);
+    console.log(`Message expires_at: ${optimistic.expires_at}`);
+    console.log(`Current time: ${new Date().toISOString()}`);
+    
     setMessages((prev) => [...prev, optimistic]);
 
     const requestBody: any = { sender: me, receiver: active, content };
@@ -417,6 +433,11 @@ export default function Chat({ me }: { me: string }) {
                 {displayedMessages.map((m) => {
                   const isExpired = m.expires_at && new Date(m.expires_at) <= new Date();
                   const expiresIn = m.expires_at ? Math.max(0, Math.floor((new Date(m.expires_at).getTime() - Date.now()) / 1000)) : null;
+                  
+                  // Debug: Log timer values
+                  if (m.expires_at) {
+                    console.log(`Message ${m.id}: expires_at=${m.expires_at}, expiresIn=${expiresIn}s, isExpired=${isExpired}`);
+                  }
                   
                   if (isExpired) {
                     return (
