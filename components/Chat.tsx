@@ -108,7 +108,7 @@ export default function Chat({ me }: { me: string }) {
         .or(`and(sender_username.eq.${me},receiver_username.eq.${active}),and(sender_username.eq.${active},receiver_username.eq.${me})`)
         .order('created_at', { ascending: true });
       setMessages((data as Message[]) ?? []);
-      return;
+      // Don't return here - let the message be sent normally
     }
     
     // Send normal message (always allowed)
@@ -226,26 +226,48 @@ export default function Chat({ me }: { me: string }) {
     window.location.reload();
   }
 
-  const displayedMessages = messages;
+  const displayedMessages = useMemo(() => {
+    if (!showPreviousMessages) {
+      // Only show messages from current session (after component mounted)
+      const sessionStart = new Date().getTime() - 5 * 60 * 1000; // Last 5 minutes as session start
+      return messages.filter(m => new Date(m.created_at).getTime() > sessionStart);
+    }
+    return messages;
+  }, [messages, showPreviousMessages]);
 
   return (
-    <div className="h-screen flex flex-col md:grid md:grid-cols-[280px_1fr]">
+    <div className="h-screen max-h-screen flex flex-col md:grid md:grid-cols-[280px_1fr] overflow-hidden">
       {/* Mobile Header */}
-      <header className="md:hidden bg-gray-800 p-4 flex items-center justify-between border-b border-gray-700">
+      <header className="md:hidden bg-gray-800 p-3 flex items-center justify-between border-b border-gray-700 flex-shrink-0">
         <div>
           <div className="text-sm text-gray-400">Signed in as</div>
           <div className="font-semibold">@{me}</div>
+          {active && (
+            <div className="text-xs text-gray-400">Chat: @{active}</div>
+          )}
         </div>
-        <button
-          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-          className="p-2 rounded bg-gray-700 hover:bg-gray-600"
-          title="Toggle menu"
-          aria-label="Toggle mobile menu"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
-        </button>
+        <div className="flex items-center gap-2">
+          {active && (
+            <button
+              onClick={clearAllMessages}
+              className="p-2 bg-red-600 hover:bg-red-500 text-white rounded"
+              title="Clear conversation"
+              aria-label="Clear conversation"
+            >
+              🗑️
+            </button>
+          )}
+          <button
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            className="p-2 rounded bg-gray-700 hover:bg-gray-600"
+            title="Toggle menu"
+            aria-label="Toggle mobile menu"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+        </div>
       </header>
 
       {/* Contacts Sidebar */}
@@ -343,13 +365,26 @@ export default function Chat({ me }: { me: string }) {
       <section className="flex flex-col h-full flex-1">
         {/* Desktop Header */}
         <header className="hidden md:block p-4 border-b border-gray-700 bg-gray-800">
-          <div className="text-sm text-gray-400">Signed in as</div>
-          <div className="font-semibold text-white">@{me}</div>
-          {active && (
-            <div className="text-sm text-gray-400 mt-1">
-              Chatting with @{active} {!showPreviousMessages && '(Previous messages hidden for privacy)'}
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm text-gray-400">Signed in as</div>
+              <div className="font-semibold text-white">@{me}</div>
+              {active && (
+                <div className="text-sm text-gray-400 mt-1">
+                  Chatting with @{active} {!showPreviousMessages && '(Previous messages hidden for privacy)'}
+                </div>
+              )}
             </div>
-          )}
+            {active && (
+              <button
+                onClick={clearAllMessages}
+                className="px-3 py-2 bg-red-600 hover:bg-red-500 text-white text-sm rounded-lg transition-colors flex items-center gap-2"
+                title="Clear this conversation"
+              >
+                🗑️ Clear Chat
+              </button>
+            )}
+          </div>
         </header>
 
         {/* Messages */}
