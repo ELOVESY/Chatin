@@ -8,6 +8,7 @@ type Message = {
   receiver_username: string;
   content: string;
   created_at: string;
+  expires_at?: string;
 };
 
 export default function Chat({ me }: { me: string }) {
@@ -18,7 +19,19 @@ export default function Chat({ me }: { me: string }) {
   const [showPreviousMessages, setShowPreviousMessages] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [selfDestructTimer, setSelfDestructTimer] = useState<number>(0); // 0 = never, value in minutes
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [scheduledDateTime, setScheduledDateTime] = useState('');
   const unsubscribeRef = useRef<(() => void) | null>(null);
+
+  // Auto-cleanup expired messages and refresh timers
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setMessages(prev => prev.filter(m => !m.expires_at || new Date(m.expires_at) > new Date()));
+    }, 10000); // Check every 10 seconds
+
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     const supabase = getSupabaseClient();
@@ -104,14 +117,20 @@ export default function Chat({ me }: { me: string }) {
       sender_username: me,
       receiver_username: active,
       content,
-      created_at: new Date().toISOString()
+      created_at: new Date().toISOString(),
+      expires_at: selfDestructTimer > 0 ? new Date(Date.now() + selfDestructTimer * 60 * 1000).toISOString() : undefined
     };
     setMessages((prev) => [...prev, optimistic]);
+
+    const requestBody: any = { sender: me, receiver: active, content };
+    if (selfDestructTimer > 0) {
+      requestBody.expiresInMinutes = selfDestructTimer;
+    }
 
     const res = await fetch('/api/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sender: me, receiver: active, content })
+      body: JSON.stringify(requestBody)
     });
     if (!res.ok) {
       alert('Failed to send');
@@ -119,6 +138,37 @@ export default function Chat({ me }: { me: string }) {
     
     // Close mobile menu after sending
     setIsMobileMenuOpen(false);
+  }
+
+  async function scheduleMessage() {
+    if (!active || !input.trim() || !scheduledDateTime) return;
+    const content = input.trim();
+    
+    const requestBody: any = { 
+      sender: me, 
+      receiver: active, 
+      content,
+      scheduledFor: scheduledDateTime
+    };
+    
+    if (selfDestructTimer > 0) {
+      requestBody.expiresInMinutes = selfDestructTimer;
+    }
+
+    const res = await fetch('/api/messages/schedule', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody)
+    });
+    
+    if (res.ok) {
+      setInput('');
+      setScheduledDateTime('');
+      setShowScheduleModal(false);
+      alert(`Message scheduled for ${new Date(scheduledDateTime).toLocaleString()}`);
+    } else {
+      alert('Failed to schedule message');
+    }
   }
 
   async function clearAllMessages() {
@@ -189,6 +239,8 @@ export default function Chat({ me }: { me: string }) {
         <button
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
           className="p-2 rounded bg-gray-700 hover:bg-gray-600"
+          title="Toggle menu"
+          aria-label="Toggle mobile menu"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
@@ -237,6 +289,21 @@ export default function Chat({ me }: { me: string }) {
                 className="w-full text-left text-sm text-yellow-400 hover:text-yellow-300 p-2 hover:bg-gray-600 rounded"
               >
                 👤 Change Username
+              </button>
+              <button
+                onClick={() => {
+                  const current = localStorage.getItem('chat.unlockCode') || '0+314519';
+                  const newCode = prompt(`Set custom unlock code (current: ${current}):`, current);
+                  if (newCode && newCode.trim().length >= 3 && newCode.trim().length <= 20) {
+                    localStorage.setItem('chat.unlockCode', newCode.trim());
+                    alert(`Unlock code changed to: ${newCode.trim()}`);
+                  } else if (newCode !== null) {
+                    alert('Unlock code must be 3-20 characters long');
+                  }
+                }}
+                className="w-full text-left text-sm text-purple-400 hover:text-purple-300 p-2 hover:bg-gray-600 rounded"
+              >
+                🔐 Change Unlock Code
               </button>
               <hr className="border-gray-600 my-2" />
               <button
@@ -295,18 +362,40 @@ export default function Chat({ me }: { me: string }) {
                     💡 Previous messages hidden for privacy. Send "msgmsg" to view chat history.
                   </div>
                 )}
-                {displayedMessages.map((m) => (
-                  <div key={m.id} className={`flex ${m.sender_username === me ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[85%] md:max-w-[70%] px-4 py-3 rounded-2xl ${
-                      m.sender_username === me 
-                        ? 'bg-blue-600 text-white' 
-                        : 'bg-gray-700 text-gray-100'
-                    }`}>
-                      <div className="text-xs opacity-70 mb-1">@{m.sender_username}</div>
-                      <div className="whitespace-pre-wrap break-words">{m.content}</div>
+                {displayedMessages.map((m) => {
+                  const isExpired = m.expires_at && new Date(m.expires_at) <= new Date();
+                  const expiresIn = m.expires_at ? Math.max(0, Math.floor((new Date(m.expires_at).getTime() - Date.now()) / 1000)) : null;
+                  
+                  if (isExpired) {
+                    return (
+                      <div key={m.id} className="flex justify-center">
+                        <div className="text-xs text-gray-500 italic bg-gray-800 px-3 py-2 rounded-lg">
+                          🔥 Message self-destructed
+                        </div>
+                      </div>
+                    );
+                  }
+                  
+                  return (
+                    <div key={m.id} className={`flex ${m.sender_username === me ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`max-w-[85%] md:max-w-[70%] px-4 py-3 rounded-2xl ${
+                        m.sender_username === me 
+                          ? 'bg-blue-600 text-white' 
+                          : 'bg-gray-700 text-gray-100'
+                      } ${expiresIn && expiresIn < 300 ? 'ring-2 ring-orange-400' : ''}`}>
+                        <div className="text-xs opacity-70 mb-1 flex items-center justify-between">
+                          <span>@{m.sender_username}</span>
+                          {expiresIn && (
+                            <span className="text-orange-300 text-xs ml-2">
+                              ⏱️ {expiresIn < 60 ? `${expiresIn}s` : expiresIn < 3600 ? `${Math.floor(expiresIn/60)}m` : `${Math.floor(expiresIn/3600)}h`}
+                            </span>
+                          )}
+                        </div>
+                        <div className="whitespace-pre-wrap break-words">{m.content}</div>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </>
             ) : (
               <div className="text-gray-500 text-center">
@@ -327,6 +416,29 @@ export default function Chat({ me }: { me: string }) {
 
         {/* Message Input */}
         <footer className="p-4 border-t border-gray-700 bg-gray-800">
+          {/* Self-Destruct Timer Selection */}
+          <div className="mb-3 flex items-center gap-2 text-sm">
+            <span className="text-gray-400">⏱️ Self-destruct:</span>
+            <select
+              value={selfDestructTimer}
+              onChange={(e) => setSelfDestructTimer(Number(e.target.value))}
+              className="bg-gray-700 text-white border border-gray-600 rounded px-2 py-1 text-xs"
+              title="Self-destruct timer"
+              aria-label="Select self-destruct timer"
+            >
+              <option value={0}>Never</option>
+              <option value={5}>5 minutes</option>
+              <option value={60}>1 hour</option>
+              <option value={1440}>24 hours</option>
+              <option value={10080}>7 days</option>
+            </select>
+            {selfDestructTimer > 0 && (
+              <span className="text-orange-400 text-xs">
+                🔥 Message will delete in {selfDestructTimer < 60 ? `${selfDestructTimer}m` : selfDestructTimer < 1440 ? `${Math.floor(selfDestructTimer/60)}h` : `${Math.floor(selfDestructTimer/1440)}d`}
+              </span>
+            )}
+          </div>
+          
           <div className="flex gap-3">
             <input
               className="flex-1 bg-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-400 outline-none focus:ring-2 ring-blue-500 focus:bg-gray-600 transition-all"
@@ -343,6 +455,14 @@ export default function Chat({ me }: { me: string }) {
               }}
             />
             <button 
+              className="px-4 py-3 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium transition-colors text-sm" 
+              disabled={!active || !input.trim()} 
+              onClick={() => setShowScheduleModal(true)}
+              title="Schedule Message"
+            >
+              ⏰
+            </button>
+            <button 
               className="px-6 py-3 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium transition-colors" 
               disabled={!active || !input.trim()} 
               onClick={sendMessage}
@@ -352,6 +472,59 @@ export default function Chat({ me }: { me: string }) {
           </div>
         </footer>
       </section>
+
+      {/* Schedule Message Modal */}
+      {showScheduleModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-white text-lg font-semibold mb-4">📅 Schedule Message</h3>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-gray-300 text-sm mb-2">Send to: @{active}</label>
+                <div className="bg-gray-700 rounded-lg p-3 text-gray-100 text-sm max-h-20 overflow-y-auto">
+                  {input}
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-gray-300 text-sm mb-2">Schedule for:</label>
+                <input
+                  type="datetime-local"
+                  value={scheduledDateTime}
+                  onChange={(e) => setScheduledDateTime(e.target.value)}
+                  min={new Date(Date.now() + 60000).toISOString().slice(0, 16)} // At least 1 minute from now
+                  className="w-full bg-gray-700 text-white border border-gray-600 rounded px-3 py-2"
+                  title="Schedule date and time"
+                  aria-label="Select schedule date and time"
+                />
+              </div>
+              
+              {selfDestructTimer > 0 && (
+                <div className="text-orange-400 text-sm">
+                  🔥 Message will self-destruct {selfDestructTimer < 60 ? `${selfDestructTimer}m` : selfDestructTimer < 1440 ? `${Math.floor(selfDestructTimer/60)}h` : `${Math.floor(selfDestructTimer/1440)}d`} after being sent
+                </div>
+              )}
+            </div>
+            
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowScheduleModal(false)}
+                className="flex-1 px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={scheduleMessage}
+                disabled={!scheduledDateTime}
+                className="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+              >
+                Schedule
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

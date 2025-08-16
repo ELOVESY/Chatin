@@ -7,22 +7,41 @@ export const runtime = 'nodejs';
 const Body = z.object({
   sender: z.string().min(1).max(32),
   receiver: z.string().min(1).max(32),
-  content: z.string().min(1).max(2000)
+  content: z.string().min(1).max(2000),
+  expiresInMinutes: z.number().optional() // Optional: minutes until message expires
 });
 
 export async function POST(req: Request) {
   try {
     const supabaseAdmin = getSupabaseAdmin();
     const json = await req.json();
-    const { sender, receiver, content } = Body.parse(json);
+    const { sender, receiver, content, expiresInMinutes } = Body.parse(json);
     if (sender === receiver) {
       return NextResponse.json({ error: 'Cannot message yourself.' }, { status: 400 });
     }
+    
+    // Calculate expires_at timestamp if expiration is set
+    let expires_at = null;
+    if (expiresInMinutes && expiresInMinutes > 0) {
+      expires_at = new Date(Date.now() + expiresInMinutes * 60 * 1000).toISOString();
+    }
+    
     // Ensure both users exist (idempotent upsert semantics)
     await supabaseAdmin.from('users').upsert([{ username: sender }, { username: receiver }], { onConflict: 'username' });
+    
+    const messageData: any = { 
+      sender_username: sender, 
+      receiver_username: receiver, 
+      content 
+    };
+    
+    if (expires_at) {
+      messageData.expires_at = expires_at;
+    }
+    
     const { data, error } = await supabaseAdmin
       .from('messages')
-      .insert({ sender_username: sender, receiver_username: receiver, content })
+      .insert(messageData)
       .select()
       .single();
 

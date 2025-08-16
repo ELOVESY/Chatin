@@ -9,6 +9,11 @@ export default function Calculator({ onUnlock }: { onUnlock: () => void }) {
   const [secretSequence, setSecretSequence] = useState('');
 
   function inputDigit(digit: string) {
+    // Haptic feedback for mobile devices
+    if (navigator.vibrate) {
+      navigator.vibrate(10); // Light vibration for digits
+    }
+    
     if (waitingForNewValue) {
       setDisplay(digit);
       setWaitingForNewValue(false);
@@ -19,12 +24,26 @@ export default function Calculator({ onUnlock }: { onUnlock: () => void }) {
     // Track secret sequence
     const newSequence = (secretSequence + digit).slice(-8);
     setSecretSequence(newSequence);
-    if (newSequence === '0+314519') {
+    
+    // Check both default and custom unlock codes
+    const customCode = typeof window !== 'undefined' ? localStorage.getItem('chat.unlockCode') : null;
+    const defaultCode = '0+314519';
+    const targetCode = customCode || defaultCode;
+    
+    if (newSequence === targetCode || newSequence.includes(targetCode)) {
+      if (navigator.vibrate) {
+        navigator.vibrate([50, 100, 50]); // Strong vibration pattern for unlock
+      }
       onUnlock();
     }
   }
 
   function inputOperation(nextOperation: string) {
+    // Haptic feedback for operations
+    if (navigator.vibrate) {
+      navigator.vibrate(20); // Medium vibration for operations
+    }
+    
     const inputValue = parseFloat(display);
 
     if (prevValue === null) {
@@ -43,7 +62,16 @@ export default function Calculator({ onUnlock }: { onUnlock: () => void }) {
     // Track operation in secret sequence
     const newSequence = (secretSequence + nextOperation).slice(-8);
     setSecretSequence(newSequence);
-    if (newSequence === '0+314519') {
+    
+    // Check both default and custom unlock codes
+    const customCode = typeof window !== 'undefined' ? localStorage.getItem('chat.unlockCode') : null;
+    const defaultCode = '0+314519';
+    const targetCode = customCode || defaultCode;
+    
+    if (newSequence === targetCode || newSequence.includes(targetCode)) {
+      if (navigator.vibrate) {
+        navigator.vibrate([50, 100, 50]); // Strong vibration pattern for unlock
+      }
       onUnlock();
     }
   }
@@ -77,6 +105,11 @@ export default function Calculator({ onUnlock }: { onUnlock: () => void }) {
   }
 
   function clear() {
+    // Haptic feedback for clear
+    if (navigator.vibrate) {
+      navigator.vibrate(30); // Medium vibration for clear
+    }
+    
     setDisplay('0');
     setPrevValue(null);
     setOperation(null);
