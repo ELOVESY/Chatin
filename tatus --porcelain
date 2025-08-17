@@ -1,0 +1,5 @@
+[33m3dfc28d4[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m 🎨 MAJOR UI/UX OVERHAUL + Fixes
+[33m69cf4df6[m 🔍 DEBUG: Add logging for self-destruct timer issues
+[33m11b74611[m 🔧 CRITICAL FIX: msgmsg and self-destruct functionality
+[33ma6f5a247[m 🔧 Fix critical issues + Add individual Clear Chat button
+[33mc9d16e76[m 🚀 Implement advanced features: Haptic feedback, Custom unlock codes, Self-destructing messages, Message scheduling

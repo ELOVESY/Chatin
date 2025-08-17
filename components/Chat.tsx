@@ -9,6 +9,10 @@ type Message = {
   content: string;
   created_at: string;
   expires_at?: string;
+  file_url?: string;
+  file_name?: string;
+  file_size?: number;
+  file_type?: string;
 };
 
 export default function Chat({ me }: { me: string }) {
@@ -23,6 +27,8 @@ export default function Chat({ me }: { me: string }) {
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [scheduledDateTime, setScheduledDateTime] = useState('');
   const [sessionStartTime] = useState(Date.now()); // Track when this session started
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const unsubscribeRef = useRef<(() => void) | null>(null);
 
   // Auto-cleanup expired messages and refresh timers
@@ -44,17 +50,34 @@ export default function Chat({ me }: { me: string }) {
     return () => clearInterval(interval);
   }, []);
 
+  // Load contacts from Supabase
   useEffect(() => {
-    const supabase = getSupabaseClient();
-    const stored = typeof window !== 'undefined' ? localStorage.getItem('chat.contacts') : null;
-    if (stored) {
+    async function loadContacts() {
       try {
-        const list = JSON.parse(stored) as string[];
-        setContacts(list);
-        setActive(list[0] ?? null);
-      } catch {}
+        const response = await fetch(`/api/contacts?username=${me}`);
+        if (response.ok) {
+          const { contacts: contactList } = await response.json();
+          setContacts(contactList);
+          setActive(contactList[0] ?? null);
+        }
+      } catch (error) {
+        console.error('Failed to load contacts:', error);
+        // Fallback to localStorage if API fails
+        const stored = typeof window !== 'undefined' ? localStorage.getItem('chat.contacts') : null;
+        if (stored) {
+          try {
+            const list = JSON.parse(stored) as string[];
+            setContacts(list);
+            setActive(list[0] ?? null);
+          } catch {}
+        }
+      }
     }
-  }, []);
+    
+    if (me) {
+      loadContacts();
+    }
+  }, [me]);
 
   useEffect(() => {
     if (!active) return;
@@ -92,15 +115,33 @@ export default function Chat({ me }: { me: string }) {
     };
   }, [me, active, showPreviousMessages]);
 
-  function addContact() {
+  async function addContact() {
     const u = window.prompt('Add contact by username:');
     if (!u) return;
     if (u === me) return alert('Cannot add yourself');
     if (contacts.includes(u)) return setActive(u);
-    const next = [...contacts, u];
-    setContacts(next);
-    if (typeof window !== 'undefined') localStorage.setItem('chat.contacts', JSON.stringify(next));
-    setActive(u);
+    
+    try {
+      const response = await fetch('/api/contacts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ owner: me, contact: u })
+      });
+      
+      if (response.ok) {
+        const next = [...contacts, u];
+        setContacts(next);
+        setActive(u);
+        // Also update localStorage as backup
+        if (typeof window !== 'undefined') localStorage.setItem('chat.contacts', JSON.stringify(next));
+      } else {
+        const { error } = await response.json();
+        alert(`Failed to add contact: ${error}`);
+      }
+    } catch (error) {
+      console.error('Failed to add contact:', error);
+      alert('Failed to add contact. Please try again.');
+    }
   }
 
   async function sendMessage() {
@@ -168,6 +209,37 @@ export default function Chat({ me }: { me: string }) {
     
     // Close mobile menu after sending
     setIsMobileMenuOpen(false);
+  }
+
+  async function uploadFile(file: File) {
+    if (!active || !file) return;
+    
+    setIsUploading(true);
+    
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('sender', me);
+      formData.append('receiver', active);
+      
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData
+      });
+      
+      if (response.ok) {
+        const { message } = await response.json();
+        setMessages(prev => [...prev, message]);
+      } else {
+        const { error } = await response.json();
+        alert(`Upload failed: ${error}`);
+      }
+    } catch (error) {
+      console.error('File upload failed:', error);
+      alert('File upload failed. Please try again.');
+    } finally {
+      setIsUploading(false);
+    }
   }
 
   async function scheduleMessage() {
@@ -269,21 +341,26 @@ export default function Chat({ me }: { me: string }) {
   }, [messages, showPreviousMessages, sessionStartTime]);
 
   return (
-    <div className="h-screen w-full flex flex-col md:grid md:grid-cols-[300px_1fr] overflow-hidden">
+    <div className="h-screen w-full flex flex-col md:grid md:grid-cols-[320px_1fr] overflow-hidden bg-gradient-to-br from-gray-900 via-gray-800 to-black">
       {/* Mobile Header */}
-      <header className="md:hidden bg-gray-800 p-3 flex items-center justify-between border-b border-gray-700 flex-shrink-0">
-        <div>
-          <div className="text-sm text-gray-400">Signed in as</div>
-          <div className="font-semibold">@{me}</div>
-          {active && (
-            <div className="text-xs text-gray-400">Chat: @{active}</div>
-          )}
+      <header className="md:hidden bg-gradient-to-r from-gray-800 to-gray-700 p-4 flex items-center justify-between border-b border-gray-600 flex-shrink-0 shadow-lg">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-lg">
+            {me.charAt(0).toUpperCase()}
+          </div>
+          <div>
+            <div className="text-xs text-gray-300">Signed in as</div>
+            <div className="font-bold text-white text-lg">@{me}</div>
+            {active && (
+              <div className="text-xs text-blue-400 font-medium">Chat: @{active}</div>
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           {active && (
             <button
               onClick={clearAllMessages}
-              className="p-2 bg-red-600 hover:bg-red-500 text-white rounded"
+              className="p-3 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-400 hover:to-red-500 text-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-200"
               title="Clear conversation"
               aria-label="Clear conversation"
             >
@@ -292,11 +369,11 @@ export default function Chat({ me }: { me: string }) {
           )}
           <button
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="p-2 rounded bg-gray-700 hover:bg-gray-600"
+            className="p-3 rounded-xl bg-gradient-to-r from-gray-600 to-gray-700 hover:from-gray-500 hover:to-gray-600 shadow-lg hover:shadow-xl transition-all duration-200"
             title="Toggle menu"
             aria-label="Toggle mobile menu"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
@@ -304,15 +381,24 @@ export default function Chat({ me }: { me: string }) {
       </header>
 
       {/* Contacts Sidebar */}
-      <aside className={`${isMobileMenuOpen ? 'block' : 'hidden'} md:block bg-gray-800 border-r border-gray-700 p-4 md:relative absolute top-16 left-0 right-0 z-10 h-full overflow-y-auto`}>
-        <div className="flex items-center justify-between mb-4">
-          <div className="font-semibold text-white">Contacts</div>
-          <div className="flex gap-2">
-            <button className="text-sm text-blue-400 hover:text-blue-300" onClick={addContact}>
+      <aside className={`${isMobileMenuOpen ? 'block' : 'hidden'} md:block bg-gradient-to-b from-gray-800 to-gray-900 border-r border-gray-600 p-4 md:p-6 md:relative absolute top-20 left-0 right-0 z-10 h-full overflow-y-auto shadow-xl`}>
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+              <span className="text-white text-sm font-bold">👥</span>
+            </div>
+            <div className="font-bold text-white text-lg">Contacts</div>
+          </div>
+          <div className="flex gap-3">
+            <button 
+              className="px-3 py-2 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 text-white text-sm rounded-lg transition-all duration-200 shadow-md hover:shadow-lg flex items-center gap-2" 
+              onClick={addContact}
+            >
+              <span className="text-lg">+</span>
               Add
             </button>
             <button 
-              className="text-sm text-gray-400 hover:text-white" 
+              className="p-2 bg-gradient-to-r from-gray-600 to-gray-700 hover:from-gray-500 hover:to-gray-600 text-gray-200 rounded-lg transition-all duration-200 shadow-md hover:shadow-lg" 
               onClick={() => setShowSettings(!showSettings)}
               title="Settings"
             >
@@ -371,79 +457,106 @@ export default function Chat({ me }: { me: string }) {
           </div>
         )}
 
-        <div className="space-y-2">
-          {contacts.length === 0 && (
-            <div className="text-gray-500 text-sm">No contacts yet</div>
+        <div className="space-y-3">
+          {contacts.length === 0 ? (
+            <div className="text-center py-8">
+              <div className="text-gray-400 text-4xl mb-3">👥</div>
+              <div className="text-gray-300 font-medium mb-2">No contacts yet</div>
+              <div className="text-gray-500 text-sm">Add your first contact to start chatting!</div>
+            </div>
+          ) : (
+            contacts.map((c) => (
+              <button
+                key={c}
+                onClick={() => {
+                  setActive(c);
+                  setIsMobileMenuOpen(false);
+                }}
+                className={`w-full text-left p-4 rounded-xl transition-all duration-200 group ${
+                  active === c
+                    ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg transform scale-105'
+                    : 'bg-gradient-to-r from-gray-700 to-gray-800 hover:from-gray-600 hover:to-gray-700 text-gray-200 hover:shadow-lg hover:transform hover:scale-105'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-lg ${
+                    active === c 
+                      ? 'bg-white/20' 
+                      : 'bg-gradient-to-br from-gray-500 to-gray-600 group-hover:from-gray-400 group-hover:to-gray-500'
+                  }`}>
+                    {c.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="flex-1">
+                    <div className="font-semibold text-base">@{c}</div>
+                    <div className={`text-xs ${active === c ? 'text-blue-100' : 'text-gray-400'}`}>
+                      {active === c ? 'Active chat' : 'Click to chat'}
+                    </div>
+                  </div>
+                  {active === c && (
+                    <div className="w-3 h-3 bg-white rounded-full animate-pulse"></div>
+                  )}
+                </div>
+              </button>
+            ))
           )}
-          {contacts.map((c) => (
-            <button
-              key={c}
-              onClick={() => {
-                setActive(c);
-                setIsMobileMenuOpen(false);
-              }}
-              className={`w-full text-left px-3 py-3 rounded-lg transition-colors ${
-                active === c 
-                  ? 'bg-blue-600 text-white' 
-                  : 'bg-gray-700 hover:bg-gray-600 text-gray-100'
-              }`}
-            >
-              @{c}
-            </button>
-          ))}
         </div>
       </aside>
 
       {/* Chat Section */}
       <section className="flex flex-col h-full flex-1">
-        {/* Desktop Header */}
-        <header className="hidden md:block p-4 border-b border-gray-700 bg-gray-800">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div>
-                <div className="text-sm text-gray-400">Signed in as</div>
-                <div className="font-semibold text-white text-lg">@{me}</div>
+              {/* Desktop Header */}
+      <header className="hidden md:block p-6 border-b border-gray-600 bg-gradient-to-r from-gray-800 to-gray-700 shadow-lg">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-xl shadow-lg">
+                {me.charAt(0).toUpperCase()}
               </div>
-              {active && (
-                <div className="h-8 w-px bg-gray-600"></div>
-              )}
-              {active && (
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
-                  <div>
-                    <div className="text-sm text-gray-300">Chatting with</div>
-                    <div className="font-semibold text-white">@{active}</div>
-                  </div>
-                </div>
-              )}
+              <div>
+                <div className="text-sm text-gray-300">Signed in as</div>
+                <div className="font-bold text-white text-xl">@{me}</div>
+              </div>
             </div>
             {active && (
+              <div className="h-12 w-px bg-gradient-to-b from-gray-600 to-transparent"></div>
+            )}
+            {active && (
               <div className="flex items-center gap-3">
-                <button
-                  onClick={() => setShowPreviousMessages(!showPreviousMessages)}
-                  className={`px-3 py-2 text-sm rounded-lg transition-colors flex items-center gap-2 ${
-                    showPreviousMessages 
-                      ? 'bg-blue-600 hover:bg-blue-500 text-white' 
-                      : 'bg-gray-600 hover:bg-gray-500 text-gray-200'
-                  }`}
-                  title={showPreviousMessages ? "Hide previous messages" : "Show previous messages"}
-                >
-                  {showPreviousMessages ? '🔒 Hide History' : '📜 Show History'}
-                </button>
-                <button
-                  onClick={clearAllMessages}
-                  className="px-3 py-2 bg-red-600 hover:bg-red-500 text-white text-sm rounded-lg transition-colors flex items-center gap-2"
-                  title="Clear this conversation"
-                >
-                  🗑️ Clear Chat
-                </button>
+                <div className="w-4 h-4 bg-gradient-to-r from-green-400 to-emerald-500 rounded-full animate-pulse shadow-lg"></div>
+                <div>
+                  <div className="text-sm text-gray-300 font-medium">Chatting with</div>
+                  <div className="font-bold text-white text-lg">@{active}</div>
+                </div>
               </div>
             )}
           </div>
-        </header>
+          {active && (
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => setShowPreviousMessages(!showPreviousMessages)}
+                className={`px-4 py-3 text-sm rounded-xl transition-all duration-200 flex items-center gap-2 shadow-lg hover:shadow-xl ${
+                  showPreviousMessages 
+                    ? 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 text-white' 
+                    : 'bg-gradient-to-r from-gray-600 to-gray-700 hover:from-gray-500 hover:to-gray-600 text-gray-200'
+                }`}
+                title={showPreviousMessages ? "Hide previous messages" : "Show previous messages"}
+              >
+                {showPreviousMessages ? '🔒 Hide History' : '📜 Show History'}
+              </button>
+              <button
+                onClick={clearAllMessages}
+                className="px-4 py-3 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-400 hover:to-red-500 text-white text-sm rounded-xl transition-all duration-200 flex items-center gap-2 shadow-lg hover:shadow-xl"
+                title="Clear this conversation"
+              >
+                🗑️ Clear Chat
+              </button>
+            </div>
+          )}
+        </div>
+      </header>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-900 min-h-0">
+        <div className="flex-1 overflow-y-auto p-3 md:p-4 space-y-3 bg-gray-900 min-h-0">
           {active ? (
             displayedMessages.length > 0 ? (
               <>
@@ -467,34 +580,70 @@ export default function Chat({ me }: { me: string }) {
                     );
                   }
                   
-                  return (
-                    <div key={m.id} className={`flex ${m.sender_username === me ? 'justify-end' : 'justify-start'} group`}>
-                      <div className={`max-w-[85%] md:max-w-[70%] px-4 py-3 rounded-2xl shadow-lg transition-all duration-200 ${
-                        m.sender_username === me 
-                          ? 'bg-gradient-to-br from-blue-600 to-blue-700 text-white' 
-                          : 'bg-gradient-to-br from-gray-700 to-gray-800 text-gray-100'
-                      } ${expiresIn && expiresIn < 300 ? 'ring-2 ring-orange-400 ring-opacity-75' : ''} hover:shadow-xl`}>
-                        <div className="text-xs opacity-80 mb-2 flex items-center justify-between">
-                          <span className="font-medium">@{m.sender_username}</span>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs opacity-60">
-                              {new Date(m.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                            </span>
-                            {expiresIn && (
-                              <span className={`text-xs px-2 py-1 rounded-full ${
-                                expiresIn < 60 ? 'bg-red-500 text-white' : 
-                                expiresIn < 300 ? 'bg-orange-500 text-white' : 
-                                'bg-yellow-500 text-black'
+                                      return (
+                      <div key={m.id} className={`flex ${m.sender_username === me ? 'justify-end' : 'justify-start'} group mb-4`}>
+                        <div className={`max-w-[85%] md:max-w-[70%] px-5 py-4 rounded-2xl shadow-xl transition-all duration-300 hover:shadow-2xl ${
+                          m.sender_username === me 
+                            ? 'bg-gradient-to-br from-blue-500 via-blue-600 to-blue-700 text-white' 
+                            : 'bg-gradient-to-br from-gray-600 via-gray-700 to-gray-800 text-gray-100'
+                        } ${expiresIn && expiresIn < 300 ? 'ring-2 ring-orange-400 ring-opacity-75 animate-pulse' : ''} hover:scale-105`}>
+                          <div className="text-xs opacity-90 mb-3 flex items-center justify-between">
+                            <span className="font-semibold flex items-center gap-2">
+                              <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                                m.sender_username === me 
+                                  ? 'bg-white/20' 
+                                  : 'bg-gray-500/30'
                               }`}>
-                                ⏱️ {expiresIn < 60 ? `${expiresIn}s` : expiresIn < 3600 ? `${Math.floor(expiresIn/60)}m` : `${Math.floor(expiresIn/3600)}h`}
+                                {m.sender_username.charAt(0).toUpperCase()}
                               </span>
+                              @{m.sender_username}
+                            </span>
+                            <div className="flex items-center gap-3">
+                              <span className="text-xs opacity-70 bg-black/10 px-2 py-1 rounded-full">
+                                {new Date(m.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                              </span>
+                              {expiresIn && (
+                                <span className={`text-xs px-3 py-1 rounded-full font-medium shadow-lg ${
+                                  expiresIn < 60 ? 'bg-gradient-to-r from-red-500 to-red-600 text-white' : 
+                                  expiresIn < 300 ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white' : 
+                                  'bg-gradient-to-r from-yellow-500 to-yellow-600 text-black'
+                                }`}>
+                                  ⏱️ {expiresIn < 60 ? `${expiresIn}s` : expiresIn < 3600 ? `${Math.floor(expiresIn/60)}m` : `${Math.floor(expiresIn/3600)}h`}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="whitespace-pre-wrap break-words leading-relaxed text-base">
+                            {m.content}
+                            {m.file_url && (
+                              <div className="mt-3 p-3 bg-black/10 rounded-lg">
+                                <div className="flex items-center gap-3">
+                                  <span className="text-2xl">
+                                    {m.file_type?.startsWith('image/') ? '🖼️' : 
+                                     m.file_type?.startsWith('video/') ? '🎥' : 
+                                     m.file_type?.startsWith('audio/') ? '🎵' : '📎'}
+                                  </span>
+                                  <div className="flex-1">
+                                    <div className="font-medium text-sm">{m.file_name}</div>
+                                    <div className="text-xs opacity-70">
+                                      {m.file_size ? `${(m.file_size / 1024).toFixed(1)} KB` : ''}
+                                    </div>
+                                  </div>
+                                  <a 
+                                    href={m.file_url} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="px-3 py-1 bg-white/20 hover:bg-white/30 rounded-lg text-xs font-medium transition-colors"
+                                  >
+                                    View
+                                  </a>
+                                </div>
+                              </div>
                             )}
                           </div>
                         </div>
-                        <div className="whitespace-pre-wrap break-words leading-relaxed">{m.content}</div>
                       </div>
-                    </div>
-                  );
+                    );
                 })}
               </>
             ) : (
@@ -513,65 +662,92 @@ export default function Chat({ me }: { me: string }) {
         </div>
 
         {/* Message Input */}
-        <footer className="p-4 border-t border-gray-700 bg-gray-800">
+        <footer className="p-4 md:p-6 border-t border-gray-600 bg-gradient-to-r from-gray-800 to-gray-900 shadow-xl">
           {/* Self-Destruct Timer Selection */}
-          <div className="mb-3 flex items-center gap-3 text-sm">
-            <div className="flex items-center gap-2">
-              <span className="text-gray-400">⏱️ Self-destruct:</span>
-              <select
-                value={selfDestructTimer}
-                onChange={(e) => setSelfDestructTimer(Number(e.target.value))}
-                className="bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                title="Self-destruct timer"
-                aria-label="Select self-destruct timer"
-              >
-                <option value={0}>Never</option>
-                <option value={5}>5 minutes</option>
-                <option value={60}>1 hour</option>
-                <option value={1440}>24 hours</option>
-                <option value={10080}>7 days</option>
-              </select>
-            </div>
-            {selfDestructTimer > 0 && (
-              <div className="flex items-center gap-2 px-3 py-2 bg-orange-900/30 border border-orange-600/50 rounded-lg">
-                <span className="text-orange-400 text-sm font-medium">
-                  🔥 Message will delete in {selfDestructTimer < 60 ? `${selfDestructTimer}m` : selfDestructTimer < 1440 ? `${Math.floor(selfDestructTimer/60)}h` : `${Math.floor(selfDestructTimer/1440)}d`}
-                </span>
+                      <div className="mb-4 flex flex-col md:flex-row items-start md:items-center gap-3 md:gap-4 text-sm">
+              <div className="flex items-center gap-3">
+                <span className="text-gray-300 font-medium">⏱️ Self-destruct:</span>
+                <select
+                  value={selfDestructTimer}
+                  onChange={(e) => setSelfDestructTimer(Number(e.target.value))}
+                  className="bg-gray-700 text-white border border-gray-600 rounded-xl px-3 md:px-4 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all shadow-md"
+                  title="Self-destruct timer"
+                  aria-label="Select self-destruct timer"
+                >
+                  <option value={0}>Never</option>
+                  <option value={5}>5 minutes</option>
+                  <option value={60}>1 hour</option>
+                  <option value={1440}>24 hours</option>
+                  <option value={10080}>7 days</option>
+                </select>
               </div>
-            )}
-          </div>
+              {selfDestructTimer > 0 && (
+                <div className="flex items-center gap-2 px-3 md:px-4 py-2 bg-gradient-to-r from-orange-900/40 to-red-900/40 border border-orange-600/50 rounded-xl shadow-lg">
+                  <span className="text-orange-300 text-sm font-medium">
+                    🔥 Message will delete in {selfDestructTimer < 60 ? `${selfDestructTimer}m` : selfDestructTimer < 1440 ? `${Math.floor(selfDestructTimer/60)}h` : `${Math.floor(selfDestructTimer/1440)}d`}
+                  </span>
+                </div>
+              )}
+            </div>
           
-          <div className="flex gap-3">
+                      <div className="flex flex-col md:flex-row gap-3 md:gap-4">
+              <input
+                className="flex-1 bg-gray-700 rounded-2xl px-4 md:px-5 py-3 md:py-4 text-white placeholder-gray-400 outline-none focus:ring-2 ring-blue-500 focus:bg-gray-600 transition-all text-base shadow-lg focus:shadow-xl"
+                placeholder={
+                  active 
+                    ? `Type your message to @${active}...`
+                    : 'Select a contact first'
+                }
+                value={input}
+                disabled={!active}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') sendMessage();
+                }}
+              />
+              <div className="flex gap-2 md:gap-3">
+                <button 
+                  className="px-4 md:px-5 py-3 md:py-4 rounded-2xl bg-gradient-to-r from-green-500 to-green-600 hover:from-green-400 hover:to-green-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium transition-all text-sm shadow-lg hover:shadow-xl transform hover:scale-105" 
+                  disabled={!active || isUploading} 
+                  onClick={() => fileInputRef.current?.click()}
+                  title="Upload file"
+                >
+                  {isUploading ? '📤' : '📎'}
+                </button>
+                <button 
+                  className="px-4 md:px-5 py-3 md:py-4 rounded-2xl bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-400 hover:to-purple-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium transition-all text-sm shadow-lg hover:shadow-xl transform hover:scale-105" 
+                  disabled={!active || !input.trim()} 
+                  onClick={() => setShowScheduleModal(true)}
+                  title="Schedule Message"
+                >
+                  ⏰
+                </button>
+                <button 
+                  className="px-6 md:px-8 py-3 md:py-4 rounded-2xl bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium transition-all shadow-lg hover:shadow-xl transform hover:scale-105" 
+                  disabled={!active || !input.trim()} 
+                  onClick={sendMessage}
+                >
+                  Send
+                </button>
+              </div>
+            </div>
+            
+            {/* Hidden file input */}
             <input
-              className="flex-1 bg-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-400 outline-none focus:ring-2 ring-blue-500 focus:bg-gray-600 transition-all text-base"
-              placeholder={
-                active 
-                  ? `Type your message to @${active}...`
-                  : 'Select a contact first'
-              }
-              value={input}
-              disabled={!active}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') sendMessage();
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  uploadFile(file);
+                  e.target.value = ''; // Reset input
+                }
               }}
+              accept="image/*,video/*,audio/*,text/*,.pdf,.zip,.doc,.docx,.txt"
+              aria-label="File upload"
+              title="File upload"
             />
-            <button 
-              className="px-4 py-3 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium transition-all text-sm shadow-lg hover:shadow-xl" 
-              disabled={!active || !input.trim()} 
-              onClick={() => setShowScheduleModal(true)}
-              title="Schedule Message"
-            >
-              ⏰
-            </button>
-            <button 
-              className="px-8 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium transition-all shadow-lg hover:shadow-xl" 
-              disabled={!active || !input.trim()} 
-              onClick={sendMessage}
-            >
-              Send
-            </button>
-          </div>
         </footer>
       </section>
 
