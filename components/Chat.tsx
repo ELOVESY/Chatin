@@ -39,7 +39,7 @@ export default function Chat({ me }: { me: string }) {
         
         return filtered;
       });
-    }, 5000); // Check every 5 seconds for more responsive cleanup
+    }, 1000); // Check every 1 second for real-time countdown
 
     return () => clearInterval(interval);
   }, []);
@@ -269,7 +269,7 @@ export default function Chat({ me }: { me: string }) {
   }, [messages, showPreviousMessages, sessionStartTime]);
 
   return (
-    <div className="h-screen max-h-screen flex flex-col md:grid md:grid-cols-[280px_1fr] overflow-hidden">
+    <div className="h-screen w-full flex flex-col md:grid md:grid-cols-[300px_1fr] overflow-hidden">
       {/* Mobile Header */}
       <header className="md:hidden bg-gray-800 p-3 flex items-center justify-between border-b border-gray-700 flex-shrink-0">
         <div>
@@ -304,7 +304,7 @@ export default function Chat({ me }: { me: string }) {
       </header>
 
       {/* Contacts Sidebar */}
-      <aside className={`${isMobileMenuOpen ? 'block' : 'hidden'} md:block bg-gray-800 border-r border-gray-700 p-4 md:relative absolute top-16 left-0 right-0 z-10 max-h-[calc(100vh-4rem)] overflow-y-auto`}>
+      <aside className={`${isMobileMenuOpen ? 'block' : 'hidden'} md:block bg-gray-800 border-r border-gray-700 p-4 md:relative absolute top-16 left-0 right-0 z-10 h-full overflow-y-auto`}>
         <div className="flex items-center justify-between mb-4">
           <div className="font-semibold text-white">Contacts</div>
           <div className="flex gap-2">
@@ -399,37 +399,55 @@ export default function Chat({ me }: { me: string }) {
         {/* Desktop Header */}
         <header className="hidden md:block p-4 border-b border-gray-700 bg-gray-800">
           <div className="flex items-center justify-between">
-            <div>
-              <div className="text-sm text-gray-400">Signed in as</div>
-              <div className="font-semibold text-white">@{me}</div>
+            <div className="flex items-center gap-4">
+              <div>
+                <div className="text-sm text-gray-400">Signed in as</div>
+                <div className="font-semibold text-white text-lg">@{me}</div>
+              </div>
               {active && (
-                <div className="text-sm text-gray-400 mt-1">
-                  Chatting with @{active} {!showPreviousMessages && '(Previous messages hidden for privacy)'}
+                <div className="h-8 w-px bg-gray-600"></div>
+              )}
+              {active && (
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+                  <div>
+                    <div className="text-sm text-gray-300">Chatting with</div>
+                    <div className="font-semibold text-white">@{active}</div>
+                  </div>
                 </div>
               )}
             </div>
             {active && (
-              <button
-                onClick={clearAllMessages}
-                className="px-3 py-2 bg-red-600 hover:bg-red-500 text-white text-sm rounded-lg transition-colors flex items-center gap-2"
-                title="Clear this conversation"
-              >
-                🗑️ Clear Chat
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setShowPreviousMessages(!showPreviousMessages)}
+                  className={`px-3 py-2 text-sm rounded-lg transition-colors flex items-center gap-2 ${
+                    showPreviousMessages 
+                      ? 'bg-blue-600 hover:bg-blue-500 text-white' 
+                      : 'bg-gray-600 hover:bg-gray-500 text-gray-200'
+                  }`}
+                  title={showPreviousMessages ? "Hide previous messages" : "Show previous messages"}
+                >
+                  {showPreviousMessages ? '🔒 Hide History' : '📜 Show History'}
+                </button>
+                <button
+                  onClick={clearAllMessages}
+                  className="px-3 py-2 bg-red-600 hover:bg-red-500 text-white text-sm rounded-lg transition-colors flex items-center gap-2"
+                  title="Clear this conversation"
+                >
+                  🗑️ Clear Chat
+                </button>
+              </div>
             )}
           </div>
         </header>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-900">
+        <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-900 min-h-0">
           {active ? (
             displayedMessages.length > 0 ? (
               <>
-                {!showPreviousMessages && (
-                  <div className="text-center text-gray-500 text-sm mb-4 p-3 bg-gray-800 rounded-lg">
-                    💡 Previous messages hidden for privacy. Send "msgmsg" to view chat history.
-                  </div>
-                )}
+
                 {displayedMessages.map((m) => {
                   const isExpired = m.expires_at && new Date(m.expires_at) <= new Date();
                   const expiresIn = m.expires_at ? Math.max(0, Math.floor((new Date(m.expires_at).getTime() - Date.now()) / 1000)) : null;
@@ -450,21 +468,30 @@ export default function Chat({ me }: { me: string }) {
                   }
                   
                   return (
-                    <div key={m.id} className={`flex ${m.sender_username === me ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`max-w-[85%] md:max-w-[70%] px-4 py-3 rounded-2xl ${
+                    <div key={m.id} className={`flex ${m.sender_username === me ? 'justify-end' : 'justify-start'} group`}>
+                      <div className={`max-w-[85%] md:max-w-[70%] px-4 py-3 rounded-2xl shadow-lg transition-all duration-200 ${
                         m.sender_username === me 
-                          ? 'bg-blue-600 text-white' 
-                          : 'bg-gray-700 text-gray-100'
-                      } ${expiresIn && expiresIn < 300 ? 'ring-2 ring-orange-400' : ''}`}>
-                        <div className="text-xs opacity-70 mb-1 flex items-center justify-between">
-                          <span>@{m.sender_username}</span>
-                          {expiresIn && (
-                            <span className="text-orange-300 text-xs ml-2">
-                              ⏱️ {expiresIn < 60 ? `${expiresIn}s` : expiresIn < 3600 ? `${Math.floor(expiresIn/60)}m` : `${Math.floor(expiresIn/3600)}h`}
+                          ? 'bg-gradient-to-br from-blue-600 to-blue-700 text-white' 
+                          : 'bg-gradient-to-br from-gray-700 to-gray-800 text-gray-100'
+                      } ${expiresIn && expiresIn < 300 ? 'ring-2 ring-orange-400 ring-opacity-75' : ''} hover:shadow-xl`}>
+                        <div className="text-xs opacity-80 mb-2 flex items-center justify-between">
+                          <span className="font-medium">@{m.sender_username}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs opacity-60">
+                              {new Date(m.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                             </span>
-                          )}
+                            {expiresIn && (
+                              <span className={`text-xs px-2 py-1 rounded-full ${
+                                expiresIn < 60 ? 'bg-red-500 text-white' : 
+                                expiresIn < 300 ? 'bg-orange-500 text-white' : 
+                                'bg-yellow-500 text-black'
+                              }`}>
+                                ⏱️ {expiresIn < 60 ? `${expiresIn}s` : expiresIn < 3600 ? `${Math.floor(expiresIn/60)}m` : `${Math.floor(expiresIn/3600)}h`}
+                              </span>
+                            )}
+                          </div>
                         </div>
-                        <div className="whitespace-pre-wrap break-words">{m.content}</div>
+                        <div className="whitespace-pre-wrap break-words leading-relaxed">{m.content}</div>
                       </div>
                     </div>
                   );
@@ -474,9 +501,7 @@ export default function Chat({ me }: { me: string }) {
               <div className="text-gray-500 text-center">
                 <div className="mb-2">💬 Start the conversation!</div>
                 <div className="text-sm">Type a message below to begin chatting</div>
-                {!showPreviousMessages && (
-                  <div className="text-xs mt-2 opacity-70">Send "msgmsg" to view previous messages</div>
-                )}
+
               </div>
             )
           ) : (
@@ -490,34 +515,38 @@ export default function Chat({ me }: { me: string }) {
         {/* Message Input */}
         <footer className="p-4 border-t border-gray-700 bg-gray-800">
           {/* Self-Destruct Timer Selection */}
-          <div className="mb-3 flex items-center gap-2 text-sm">
-            <span className="text-gray-400">⏱️ Self-destruct:</span>
-            <select
-              value={selfDestructTimer}
-              onChange={(e) => setSelfDestructTimer(Number(e.target.value))}
-              className="bg-gray-700 text-white border border-gray-600 rounded px-2 py-1 text-xs"
-              title="Self-destruct timer"
-              aria-label="Select self-destruct timer"
-            >
-              <option value={0}>Never</option>
-              <option value={5}>5 minutes</option>
-              <option value={60}>1 hour</option>
-              <option value={1440}>24 hours</option>
-              <option value={10080}>7 days</option>
-            </select>
+          <div className="mb-3 flex items-center gap-3 text-sm">
+            <div className="flex items-center gap-2">
+              <span className="text-gray-400">⏱️ Self-destruct:</span>
+              <select
+                value={selfDestructTimer}
+                onChange={(e) => setSelfDestructTimer(Number(e.target.value))}
+                className="bg-gray-700 text-white border border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                title="Self-destruct timer"
+                aria-label="Select self-destruct timer"
+              >
+                <option value={0}>Never</option>
+                <option value={5}>5 minutes</option>
+                <option value={60}>1 hour</option>
+                <option value={1440}>24 hours</option>
+                <option value={10080}>7 days</option>
+              </select>
+            </div>
             {selfDestructTimer > 0 && (
-              <span className="text-orange-400 text-xs">
-                🔥 Message will delete in {selfDestructTimer < 60 ? `${selfDestructTimer}m` : selfDestructTimer < 1440 ? `${Math.floor(selfDestructTimer/60)}h` : `${Math.floor(selfDestructTimer/1440)}d`}
-              </span>
+              <div className="flex items-center gap-2 px-3 py-2 bg-orange-900/30 border border-orange-600/50 rounded-lg">
+                <span className="text-orange-400 text-sm font-medium">
+                  🔥 Message will delete in {selfDestructTimer < 60 ? `${selfDestructTimer}m` : selfDestructTimer < 1440 ? `${Math.floor(selfDestructTimer/60)}h` : `${Math.floor(selfDestructTimer/1440)}d`}
+                </span>
+              </div>
             )}
           </div>
           
           <div className="flex gap-3">
             <input
-              className="flex-1 bg-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-400 outline-none focus:ring-2 ring-blue-500 focus:bg-gray-600 transition-all"
+              className="flex-1 bg-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-400 outline-none focus:ring-2 ring-blue-500 focus:bg-gray-600 transition-all text-base"
               placeholder={
                 active 
-                  ? `Message @${active}...`
+                  ? `Type your message to @${active}...`
                   : 'Select a contact first'
               }
               value={input}
@@ -528,7 +557,7 @@ export default function Chat({ me }: { me: string }) {
               }}
             />
             <button 
-              className="px-4 py-3 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium transition-colors text-sm" 
+              className="px-4 py-3 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium transition-all text-sm shadow-lg hover:shadow-xl" 
               disabled={!active || !input.trim()} 
               onClick={() => setShowScheduleModal(true)}
               title="Schedule Message"
@@ -536,7 +565,7 @@ export default function Chat({ me }: { me: string }) {
               ⏰
             </button>
             <button 
-              className="px-6 py-3 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium transition-colors" 
+              className="px-8 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium transition-all shadow-lg hover:shadow-xl" 
               disabled={!active || !input.trim()} 
               onClick={sendMessage}
             >
