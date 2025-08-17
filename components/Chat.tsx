@@ -50,6 +50,19 @@ export default function Chat({ me }: { me: string }) {
     return () => clearInterval(interval);
   }, []);
 
+  // Check for scheduled messages every minute
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        await fetch('/api/cron/process-scheduled');
+      } catch (error) {
+        console.error('Failed to process scheduled messages:', error);
+      }
+    }, 60000); // Check every minute
+
+    return () => clearInterval(interval);
+  }, []);
+
   // Load contacts from Supabase
   useEffect(() => {
     async function loadContacts() {
@@ -446,6 +459,31 @@ export default function Chat({ me }: { me: string }) {
               >
                 🔐 Change Unlock Code
               </button>
+              <button
+                onClick={async () => {
+                  if (confirm('This will delete ALL data and start fresh. Are you sure?')) {
+                    try {
+                      const response = await fetch('/api/auth/reset', { method: 'POST' });
+                      if (response.ok) {
+                        alert('All data cleared! You can now start fresh.');
+                        // Clear local storage
+                        if (typeof window !== 'undefined') {
+                          localStorage.clear();
+                        }
+                        // Reload page
+                        window.location.reload();
+                      } else {
+                        alert('Failed to clear data');
+                      }
+                    } catch (error) {
+                      alert('Failed to clear data');
+                    }
+                  }
+                }}
+                className="w-full text-left text-sm text-red-500 hover:text-red-400 p-2 hover:bg-gray-600 rounded font-medium"
+              >
+                🗑️ Clear All Data & Start Fresh
+              </button>
               <hr className="border-gray-600 my-2" />
               <button
                 onClick={clearEverything}
@@ -690,7 +728,23 @@ export default function Chat({ me }: { me: string }) {
               )}
             </div>
           
-                      <div className="flex flex-col md:flex-row gap-3 md:gap-4">
+                      <div className="flex gap-2 md:gap-3">
+              <button 
+                className="px-4 md:px-5 py-3 md:py-4 rounded-2xl bg-gradient-to-r from-green-500 to-green-600 hover:from-green-400 hover:to-green-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium transition-all text-sm shadow-lg hover:shadow-xl transform hover:scale-105" 
+                disabled={!active || isUploading} 
+                onClick={() => fileInputRef.current?.click()}
+                title="Upload file"
+              >
+                {isUploading ? '📤' : '📎'}
+              </button>
+              <button 
+                className="px-4 md:px-5 py-3 md:py-4 rounded-2xl bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-400 hover:to-purple-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium transition-all text-sm shadow-lg hover:shadow-xl transform hover:scale-105" 
+                disabled={!active || !input.trim()} 
+                onClick={() => setShowScheduleModal(true)}
+                title="Schedule Message"
+              >
+                ⏰
+              </button>
               <input
                 className="flex-1 bg-gray-700 rounded-2xl px-4 md:px-5 py-3 md:py-4 text-white placeholder-gray-400 outline-none focus:ring-2 ring-blue-500 focus:bg-gray-600 transition-all text-base shadow-lg focus:shadow-xl"
                 placeholder={
@@ -705,31 +759,13 @@ export default function Chat({ me }: { me: string }) {
                   if (e.key === 'Enter') sendMessage();
                 }}
               />
-              <div className="flex gap-2 md:gap-3">
-                <button 
-                  className="px-4 md:px-5 py-3 md:py-4 rounded-2xl bg-gradient-to-r from-green-500 to-green-600 hover:from-green-400 hover:to-green-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium transition-all text-sm shadow-lg hover:shadow-xl transform hover:scale-105" 
-                  disabled={!active || isUploading} 
-                  onClick={() => fileInputRef.current?.click()}
-                  title="Upload file"
-                >
-                  {isUploading ? '📤' : '📎'}
-                </button>
-                <button 
-                  className="px-4 md:px-5 py-3 md:py-4 rounded-2xl bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-400 hover:to-purple-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium transition-all text-sm shadow-lg hover:shadow-xl transform hover:scale-105" 
-                  disabled={!active || !input.trim()} 
-                  onClick={() => setShowScheduleModal(true)}
-                  title="Schedule Message"
-                >
-                  ⏰
-                </button>
-                <button 
-                  className="px-6 md:px-8 py-3 md:py-4 rounded-2xl bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium transition-all shadow-lg hover:shadow-xl transform hover:scale-105" 
-                  disabled={!active || !input.trim()} 
-                  onClick={sendMessage}
-                >
-                  Send
-                </button>
-              </div>
+              <button 
+                className="px-6 md:px-8 py-3 md:py-4 rounded-2xl bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium transition-all shadow-lg hover:shadow-xl transform hover:scale-105" 
+                disabled={!active || !input.trim()} 
+                onClick={sendMessage}
+              >
+                Send
+              </button>
             </div>
             
             {/* Hidden file input */}

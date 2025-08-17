@@ -20,7 +20,9 @@ export default function HomePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password: 'dummy' })
       });
-      return response.status === 401; // 401 means user exists but wrong password
+      // 401 means user exists but wrong password
+      // 404 means user doesn't exist
+      return response.status === 401;
     } catch {
       return false; // Assume user doesn't exist on error
     }

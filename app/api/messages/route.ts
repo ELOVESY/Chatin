@@ -29,6 +29,12 @@ export async function POST(req: Request) {
     // Ensure both users exist (idempotent upsert semantics)
     await supabaseAdmin.from('users').upsert([{ username: sender }, { username: receiver }], { onConflict: 'username' });
     
+    // Auto-add contacts for both users if they don't exist
+    await supabaseAdmin.from('contacts').upsert([
+      { owner_username: sender, contact_username: receiver },
+      { owner_username: receiver, contact_username: sender }
+    ], { onConflict: 'owner_username,contact_username' });
+    
     const messageData: any = { 
       sender_username: sender, 
       receiver_username: receiver, 

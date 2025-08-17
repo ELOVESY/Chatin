@@ -32,31 +32,19 @@ export async function POST(req: Request) {
     const fileExtension = file.name.split('.').pop();
     const fileName = `${sender}_${receiver}_${timestamp}.${fileExtension}`;
     
-    // Upload to Supabase Storage
-    const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
-      .from('chat-files')
-      .upload(fileName, file, {
-        cacheControl: '3600',
-        upsert: false
-      });
+    // For now, store file info without actual file storage (base64 encoding)
+    // In production, you'd want to use proper file storage
+    const fileBuffer = await file.arrayBuffer();
+    const base64Data = Buffer.from(fileBuffer).toString('base64');
     
-    if (uploadError) {
-      return NextResponse.json({ error: uploadError.message }, { status: 400 });
-    }
-    
-    // Get public URL
-    const { data: urlData } = supabaseAdmin.storage
-      .from('chat-files')
-      .getPublicUrl(fileName);
-    
-    // Store file info in database
+    // Store file info in database with base64 data
     const { data: messageData, error: messageError } = await supabaseAdmin
       .from('messages')
       .insert({
         sender_username: sender,
         receiver_username: receiver,
         content: `📎 ${file.name}`,
-        file_url: urlData.publicUrl,
+        file_url: `data:${file.type};base64,${base64Data}`,
         file_name: file.name,
         file_size: file.size,
         file_type: file.type
@@ -70,7 +58,7 @@ export async function POST(req: Request) {
     
     return NextResponse.json({ 
       message: messageData,
-      file_url: urlData.publicUrl 
+      file_url: `data:${file.type};base64,${base64Data}`
     }, { status: 201 });
     
   } catch (e: any) {
