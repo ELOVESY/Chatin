@@ -354,26 +354,26 @@ export default function Chat({ me }: { me: string }) {
   }, [messages, showPreviousMessages, sessionStartTime]);
 
   return (
-    <div className="h-screen w-full flex flex-col md:grid md:grid-cols-[320px_1fr] overflow-hidden bg-gradient-to-br from-gray-900 via-gray-800 to-black">
+    <div className="h-screen w-full flex flex-col bg-gradient-to-br from-gray-900 via-gray-800 to-black overflow-hidden">
       {/* Mobile Header */}
-      <header className="md:hidden bg-gradient-to-r from-gray-800 to-gray-700 p-4 flex items-center justify-between border-b border-gray-600 flex-shrink-0 shadow-lg">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-lg">
+      <header className="md:hidden bg-gradient-to-r from-gray-800 to-gray-700 p-3 flex items-center justify-between border-b border-gray-600 flex-shrink-0 shadow-lg">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-sm">
             {me.charAt(0).toUpperCase()}
           </div>
           <div>
             <div className="text-xs text-gray-300">Signed in as</div>
-            <div className="font-bold text-white text-lg">@{me}</div>
+            <div className="font-bold text-white text-sm">@{me}</div>
             {active && (
               <div className="text-xs text-blue-400 font-medium">Chat: @{active}</div>
             )}
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           {active && (
             <button
               onClick={clearAllMessages}
-              className="p-3 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-400 hover:to-red-500 text-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-200"
+              className="p-2 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-400 hover:to-red-500 text-white rounded-lg shadow-lg hover:shadow-xl transition-all duration-200"
               title="Clear conversation"
               aria-label="Clear conversation"
             >
@@ -382,19 +382,21 @@ export default function Chat({ me }: { me: string }) {
           )}
           <button
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="p-3 rounded-xl bg-gradient-to-r from-gray-600 to-gray-700 hover:from-gray-500 hover:to-gray-600 shadow-lg hover:shadow-xl transition-all duration-200"
+            className="p-2 rounded-lg bg-gradient-to-r from-gray-600 to-gray-700 hover:from-gray-500 hover:to-gray-600 shadow-lg hover:shadow-xl transition-all duration-200"
             title="Toggle menu"
             aria-label="Toggle mobile menu"
           >
-            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
         </div>
       </header>
 
-      {/* Contacts Sidebar */}
-      <aside className={`${isMobileMenuOpen ? 'block' : 'hidden'} md:block bg-gradient-to-b from-gray-800 to-gray-900 border-r border-gray-600 p-4 md:p-6 md:relative absolute top-20 left-0 right-0 z-10 h-full overflow-y-auto shadow-xl`}>
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col md:grid md:grid-cols-[280px_1fr] min-h-0">
+        {/* Contacts Sidebar */}
+        <aside className={`${isMobileMenuOpen ? 'block' : 'hidden'} md:block bg-gradient-to-b from-gray-800 to-gray-900 border-r border-gray-600 p-3 md:p-4 lg:p-6 overflow-y-auto shadow-xl flex-shrink-0`}>
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
@@ -540,10 +542,10 @@ export default function Chat({ me }: { me: string }) {
         </div>
       </aside>
 
-      {/* Chat Section */}
-      <section className="flex flex-col h-full flex-1">
-              {/* Desktop Header */}
-      <header className="hidden md:block p-6 border-b border-gray-600 bg-gradient-to-r from-gray-800 to-gray-700 shadow-lg">
+              {/* Chat Section */}
+        <section className="flex flex-col flex-1 min-h-0 relative">
+          {/* Desktop Header */}
+          <header className="hidden md:block p-4 lg:p-6 border-b border-gray-600 bg-gradient-to-r from-gray-800 to-gray-700 shadow-lg flex-shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-6">
             <div className="flex items-center gap-3">
@@ -570,17 +572,6 @@ export default function Chat({ me }: { me: string }) {
           </div>
           {active && (
             <div className="flex items-center gap-4">
-              <button
-                onClick={() => setShowPreviousMessages(!showPreviousMessages)}
-                className={`px-4 py-3 text-sm rounded-xl transition-all duration-200 flex items-center gap-2 shadow-lg hover:shadow-xl ${
-                  showPreviousMessages 
-                    ? 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 text-white' 
-                    : 'bg-gradient-to-r from-gray-600 to-gray-700 hover:from-gray-500 hover:to-gray-600 text-gray-200'
-                }`}
-                title={showPreviousMessages ? "Hide previous messages" : "Show previous messages"}
-              >
-                {showPreviousMessages ? '🔒 Hide History' : '📜 Show History'}
-              </button>
               <button
                 onClick={clearAllMessages}
                 className="px-4 py-3 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-400 hover:to-red-500 text-white text-sm rounded-xl transition-all duration-200 flex items-center gap-2 shadow-lg hover:shadow-xl"
@@ -700,15 +691,16 @@ export default function Chat({ me }: { me: string }) {
         </div>
 
         {/* Message Input */}
-        <footer className="p-4 md:p-6 border-t border-gray-600 bg-gradient-to-r from-gray-800 to-gray-900 shadow-xl">
+        <footer className="border-t border-gray-600 bg-gradient-to-r from-gray-800 to-gray-900 shadow-xl flex-shrink-0 p-3 md:p-4">
           {/* Self-Destruct Timer Selection */}
-                      <div className="mb-4 flex flex-col md:flex-row items-start md:items-center gap-3 md:gap-4 text-sm">
-              <div className="flex items-center gap-3">
+          <div className="w-full space-y-3">
+            <div className="flex flex-col xs:flex-row items-start xs:items-center gap-2 text-xs sm:text-sm">
+              <div className="flex items-center gap-2">
                 <span className="text-gray-300 font-medium">⏱️ Self-destruct:</span>
                 <select
                   value={selfDestructTimer}
                   onChange={(e) => setSelfDestructTimer(Number(e.target.value))}
-                  className="bg-gray-700 text-white border border-gray-600 rounded-xl px-3 md:px-4 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all shadow-md"
+                  className="bg-gray-700 text-white border border-gray-600 rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all shadow-md"
                   title="Self-destruct timer"
                   aria-label="Select self-destruct timer"
                 >
@@ -720,17 +712,17 @@ export default function Chat({ me }: { me: string }) {
                 </select>
               </div>
               {selfDestructTimer > 0 && (
-                <div className="flex items-center gap-2 px-3 md:px-4 py-2 bg-gradient-to-r from-orange-900/40 to-red-900/40 border border-orange-600/50 rounded-xl shadow-lg">
-                  <span className="text-orange-300 text-sm font-medium">
+                <div className="flex items-center gap-2 px-2 py-1.5 bg-gradient-to-r from-orange-900/40 to-red-900/40 border border-orange-600/50 rounded-lg shadow-lg">
+                  <span className="text-orange-300 text-xs font-medium">
                     🔥 Message will delete in {selfDestructTimer < 60 ? `${selfDestructTimer}m` : selfDestructTimer < 1440 ? `${Math.floor(selfDestructTimer/60)}h` : `${Math.floor(selfDestructTimer/1440)}d`}
                   </span>
                 </div>
               )}
             </div>
-          
-                      <div className="flex gap-2 md:gap-3">
+            
+            <div className="flex gap-2 items-center">
               <button 
-                className="px-4 md:px-5 py-3 md:py-4 rounded-2xl bg-gradient-to-r from-green-500 to-green-600 hover:from-green-400 hover:to-green-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium transition-all text-sm shadow-lg hover:shadow-xl transform hover:scale-105" 
+                className="p-2.5 sm:p-3 rounded-lg bg-gradient-to-r from-green-500 to-green-600 hover:from-green-400 hover:to-green-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium transition-all text-sm shadow-lg hover:shadow-xl transform hover:scale-105 flex-shrink-0" 
                 disabled={!active || isUploading} 
                 onClick={() => fileInputRef.current?.click()}
                 title="Upload file"
@@ -738,7 +730,7 @@ export default function Chat({ me }: { me: string }) {
                 {isUploading ? '📤' : '📎'}
               </button>
               <button 
-                className="px-4 md:px-5 py-3 md:py-4 rounded-2xl bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-400 hover:to-purple-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium transition-all text-sm shadow-lg hover:shadow-xl transform hover:scale-105" 
+                className="p-2.5 sm:p-3 rounded-lg bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-400 hover:to-purple-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium transition-all text-sm shadow-lg hover:shadow-xl transform hover:scale-105 flex-shrink-0" 
                 disabled={!active || !input.trim()} 
                 onClick={() => setShowScheduleModal(true)}
                 title="Schedule Message"
@@ -746,7 +738,7 @@ export default function Chat({ me }: { me: string }) {
                 ⏰
               </button>
               <input
-                className="flex-1 bg-gray-700 rounded-2xl px-4 md:px-5 py-3 md:py-4 text-white placeholder-gray-400 outline-none focus:ring-2 ring-blue-500 focus:bg-gray-600 transition-all text-base shadow-lg focus:shadow-xl"
+                className="flex-1 min-w-0 bg-gray-700 rounded-lg px-3 py-2.5 sm:py-3 text-white placeholder-gray-400 outline-none focus:ring-2 ring-blue-500 focus:bg-gray-600 transition-all text-sm shadow-lg focus:shadow-xl"
                 placeholder={
                   active 
                     ? `Type your message to @${active}...`
@@ -760,7 +752,7 @@ export default function Chat({ me }: { me: string }) {
                 }}
               />
               <button 
-                className="px-6 md:px-8 py-3 md:py-4 rounded-2xl bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium transition-all shadow-lg hover:shadow-xl transform hover:scale-105" 
+                className="px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium transition-all text-sm shadow-lg hover:shadow-xl transform hover:scale-105 flex-shrink-0" 
                 disabled={!active || !input.trim()} 
                 onClick={sendMessage}
               >
